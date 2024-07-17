@@ -3,22 +3,22 @@
 <head>
   <meta charset="utf-8">
   
-  <title>CountDownLatch解决同步问题 | iamyeka</title>
+  <title>Category: 云原生 | iamyeka</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <meta name="description" content="应用场景：实现主线程阻塞等待直到一批多线程任务执行完成">
-<meta property="og:type" content="article">
-<meta property="og:title" content="CountDownLatch解决同步问题">
-<meta property="og:url" content="http://yoursite.com/2019/06/03/concurrent-utils/index.html">
+  <meta name="description" content="搜集笔者工作中用到的Kubectl实用命令">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Kubectl实用命令（持续更新）">
+<meta property="og:url" content="http://yoursite.com/delete/kubectl-command.html">
 <meta property="og:site_name" content="iamyeka">
-<meta property="og:description" content="应用场景：实现主线程阻塞等待直到一批多线程任务执行完成">
+<meta property="og:description" content="搜集笔者工作中用到的Kubectl实用命令">
 <meta property="og:locale" content="en_US">
-<meta property="og:image" content="https://wufazhuce-1302533045.cos.ap-shanghai.myqcloud.com/wufazhuce-1000.png">
-<meta property="article:published_time" content="2019-06-02T16:00:00.000Z">
-<meta property="article:modified_time" content="2024-06-19T08:46:45.068Z">
+<meta property="og:image" content="https://wufazhuce-1302533045.cos.ap-shanghai.myqcloud.com/wufazhuce-1012.png">
+<meta property="article:published_time" content="2020-07-28T16:00:00.000Z">
+<meta property="article:modified_time" content="2024-06-20T13:11:45.161Z">
 <meta property="article:author" content="iamyeka">
-<meta property="article:tag" content="java">
+<meta property="article:tag" content="kubernetes">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:image" content="https://wufazhuce-1302533045.cos.ap-shanghai.myqcloud.com/wufazhuce-1000.png">
+<meta name="twitter:image" content="https://wufazhuce-1302533045.cos.ap-shanghai.myqcloud.com/wufazhuce-1012.png">
   
     <link rel="icon" href="https://blog-1302533045.cos.ap-nanjing.myqcloud.com/images/icon.001.png">
   
@@ -79,94 +79,30 @@
   </div>
 </nav>
     <div id="main"><section class="article">
-  <h2 class="title">CountDownLatch解决同步问题</h2>
-  <p class="sub">2019-06-03</p>
+  <h2 class="title">Kubectl实用命令（持续更新）</h2>
+  <p class="sub">2020-07-29</p>
   <article class="content">
-    <p>Talk is cheap, show me the code</p>
-<pre><code class="java">@Slf4j
-public final class ConcurrentUtils {
-
-    private ConcurrentUtils() {
-    }
-
-    /**
-     * 在线程池中运行任务并阻塞直到所有线程都完成
-     *
-     * @param runnables
-     */
-    public static void executeTasksBlocking(Executor executor, List&lt;Runnable&gt; runnables) throws InterruptedException {
-        final CountDownLatch latch = new CountDownLatch(runnables.size());
-
-        for (final Runnable r : runnables) {
-            executor.execute(() -&gt; {
-                try {
-                    r.run();
-                } catch (Throwable e) {
-                    log.error(e.getMessage(), e);
-                } finally {
-                    latch.countDown();
-                }
-            });
-        }
-
-        try {
-            latch.await();
-        } catch (InterruptedException e) {
-            throw e;
-        }
-    }
-
-    /**
-     * 在线程池中运行任务并阻塞直到所有线程都完成,callables的顺序和返回值的顺序一致
-     *
-     * @param callables
-     * @return Callable的结果
-     */
-    public static &lt;V&gt; List&lt;V&gt; submitTasksBlocking(Executor executor, List&lt;Callable&lt;V&gt;&gt; callables) throws InterruptedException {
-        final CountDownLatch latch = new CountDownLatch(callables.size());
-        final ConcurrentMap&lt;Integer, V&gt; seq2valueMap = new ConcurrentHashMap&lt;&gt;();
-
-        int i = 0;
-        for (final Callable&lt;V&gt; r : callables) {
-            final int j = i;
-            i++;
-            executor.execute(() -&gt; {
-                try {
-                    V v = r.call();
-                    seq2valueMap.put(j, v);
-                } catch (Throwable e) {
-                    log.error(e.getMessage(), e);
-                } finally {
-                    latch.countDown();
-                }
-            });
-        }
-
-        try {
-            latch.await();
-        } catch (InterruptedException e) {
-            throw e;
-        }
-        List&lt;V&gt; ret = new ArrayList&lt;&gt;(i);
-        for (int k = 0; k &lt; i; k++) {
-            ret.add(seq2valueMap.get(k));
-        }
-
-        return ret;
-    }
-
-}</code></pre>
-<p>CountDownLatch 基于 <strong>AQS(AbstractQueuedSynchronizer)</strong> 实现</p>
-<p>基本原理是AQS内部维护一个state字段，当state==0时，表示可以竞争获得锁，当初始化CountDownLatch时指定了n，可理解为n个线程获得了n把锁，主线程调用await()方法被阻塞住，任务线程每执行一次countDown()，state就减少1，表示释放掉了一把锁，直到state变为0，主线程可以竞争到锁，脱离阻塞状态继续往下执行</p>
-<p>AQS是Java实现多线程同步的精髓所在，值得深入挖掘，博主将另外写一篇博客详细介绍AQS的实现原理</p>
+    <ul>
+<li>判断某个IP是否来自容器服务<pre><code>kubectl get po -n prod -o custom-columns=&#39;name:.metadata.name,ip:.status.podIP&#39; | grep 10.204.60.52</code></pre></li>
+</ul>
+<ul>
+<li>强制删除某个命名空间(如：autotest)下异常退出的容器<pre><code>kubectl get po -n autotest | grep -E &#39;Evicted|Terminating|Unknown&#39; | awk &#39;{print $1}&#39; | xargs kubectl delete po -n autotest --force --grace-period 0</code></pre></li>
+</ul>
+<ul>
+<li>查看某个ServiceAccount对应的token，可用于调用Api-server时作为Bearer Token认证<pre><code>kubectl -n kube-system describe secret $(kubectl -n kube-system get secret | grep admin | awk &#39;{print $1}&#39;)</code></pre></li>
+</ul>
+<ul>
+<li><p>用kubectl管理多集群</p>
+<pre><code>export  KUBECONFIG=/path/to/config-cluster-1:/path/to/config-cluster-2
+kubectl config use-context cluster-1-admin@cluster-1</code></pre></li>
+<li><p>快速创建具备cluster-role权限的用户</p>
+<pre><code>kubectl create serviceaccount dashboard-admin -n kube-system
+kubectl create clusterrolebinding dashboard-cluster-admin --clusterrole=cluster-admin --serviceaccount=kube-system:dashboard-admin</code></pre></li>
+</ul>
 
   </article>
   <footer class="f-cf">
     
-      <a href="/2019/06/09/threads-print-abc/" class="link f-fl">⟵Java线程同步使用案例</a>
-    
-    
-      <a href="/2018/04/02/blog-site-technology-stack/" class="link f-fr">博客网站搭建⟶</a>
     
   </footer>
 </section>
