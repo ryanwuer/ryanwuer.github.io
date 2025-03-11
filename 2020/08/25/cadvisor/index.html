@@ -12,18 +12,18 @@
 <meta property="og:site_name" content="iamyeka">
 <meta property="og:description" content="说明工作中使用cadvisor遇到的一些问题">
 <meta property="og:locale" content="en_US">
-<meta property="og:image" content="https://wufazhuce-1302533045.cos.ap-shanghai.myqcloud.com/wufazhuce-1018.png">
+<meta property="og:image" content="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/gallery/wufazhuce-1018.png">
 <meta property="article:published_time" content="2020-08-24T16:00:00.000Z">
-<meta property="article:modified_time" content="2024-06-20T13:02:38.250Z">
+<meta property="article:modified_time" content="2025-03-11T13:49:17.834Z">
 <meta property="article:author" content="iamyeka">
 <meta property="article:tag" content="prometheus">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:image" content="https://wufazhuce-1302533045.cos.ap-shanghai.myqcloud.com/wufazhuce-1018.png">
+<meta name="twitter:image" content="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/gallery/wufazhuce-1018.png">
   
     <link rel="icon" href="https://blog-1302533045.cos.ap-nanjing.myqcloud.com/images/icon.001.png">
   
-  <link rel="stylesheet" href="//cdn.bootcss.com/highlight.js/10.1.2/styles/github.min.css">
-  <script src="//cdn.bootcss.com/highlight.js/10.1.2/highlight.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/highlightjs-line-numbers.js@2.6.0/dist/highlightjs-line-numbers.min.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', (event) => {
@@ -86,7 +86,7 @@
 <blockquote>
 <p>问题1：Kubelet内置Cadvisor暴露的TCP指标value全为0?</p>
 </blockquote>
-<p>相关issue：<a href="https://github.com/kubernetes/kubernetes/issues/60279" target="_blank" rel="noopener">https://github.com/kubernetes/kubernetes/issues/60279</a><br>开发者明确表达：<br><img src="https://blog-1302533045.cos.ap-nanjing.myqcloud.com/images/cadvisor-tcp.png" alt="upload successful"></p>
+<p>相关issue：<a href="https://github.com/kubernetes/kubernetes/issues/60279" target="_blank" rel="noopener">https://github.com/kubernetes/kubernetes/issues/60279</a><br>开发者明确表达：<br><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/cadvisor-tcp.png" alt="upload successful"></p>
 <blockquote>
 <p>问题2：Cadvisor暴露的指标不含PodIP？如何与其他系统如CAT做联动查询？</p>
 </blockquote>
@@ -106,7 +106,7 @@
         }
         ipAddress = c.NetworkSettings.IPAddress
     }</code></pre>
-<p>不知道是测试人员的疏漏还是啥缘故？虽然代码里写了kubernetes中部署的容器可以拿到IP，但实际无法拿到，也得到开发者肯定的答复<br><img src="https://blog-1302533045.cos.ap-nanjing.myqcloud.com/images/cadvisor-ip.png" alt="upload successful"></p>
+<p>不知道是测试人员的疏漏还是啥缘故？虽然代码里写了kubernetes中部署的容器可以拿到IP，但实际无法拿到，也得到开发者肯定的答复<br><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/cadvisor-ip.png" alt="upload successful"></p>
 <p>最终，开发者建议我用Kube-state-metrics，然后通过Prometheus的Join语法关联查询得到IP，经过实践，可以满足需求，Join语法如下：</p>
 <pre><code>container_cpu_usage_rate{container=&quot;prism&quot;, namespace=&quot;dev&quot;}  * on(pod) group_left(pod_ip, instance) kube_pod_info{namespace=&quot;dev&quot;}</code></pre><p>Prometheus支持一对多、多对一、和多对多的指标关联，可查询官方文档确认使用方式。</p>
 

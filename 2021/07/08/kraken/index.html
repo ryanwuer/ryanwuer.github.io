@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  <title>Kraken P2P 镜像分发系统的生产实践 | iamyeka</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="description" content="介绍笔者在生产环境中使用Kraken的经验">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Kraken P2P 镜像分发系统的生产实践">
+<meta property="og:url" content="http://yoursite.com/2021/07/08/kraken/index.html">
+<meta property="og:site_name" content="iamyeka">
+<meta property="og:description" content="介绍笔者在生产环境中使用Kraken的经验">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/gallery/wufazhuce-1031.png">
+<meta property="article:published_time" content="2021-07-07T16:00:00.000Z">
+<meta property="article:modified_time" content="2025-03-11T14:50:41.966Z">
+<meta property="article:author" content="iamyeka">
+<meta property="article:tag" content="kubernetes">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/gallery/wufazhuce-1031.png">
+  
+    <link rel="icon" href="https://blog-1302533045.cos.ap-nanjing.myqcloud.com/images/icon.001.png">
+  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlightjs-line-numbers.js@2.6.0/dist/highlightjs-line-numbers.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', (event) => {
+      document.querySelectorAll('pre code').forEach((block) => {
+        hljs.highlightBlock(block);``
+        hljs.lineNumbersBlock(block);
+      });
+    });
+  </script>
+  
+<link rel="stylesheet" href="/css/index.css">
+
+<meta name="generator" content="Hexo 4.2.1"></head>
+
+<body style="
+
+
+    background-color: #eff0f6
+
+        ">
+<div id="container">
+    <nav id="nav">
+  <header class="header">
+    <a href="/" class="title"></a>
+  </header>
+  <div class="ctnWrap">
+    <div class="icons">
+      
+        
+          
+            <a href="https://github.com/iamyeka" target="_blank" class="nav-icn iconfont icon-github">·GitHub</a>
+          
+        
+      
+    </div>
+    <div class="menu">
+      
+        
+            <a href="/" class="nav-menu ">主页</a>
+          
+        
+            <a href="/archives" class="nav-menu ">归档</a>
+          
+        
+            <a href="/tag" class="nav-menu ">标签</a>
+          
+        
+            <a href="/about" class="nav-menu ">关于</a>
+          
+        
+      
+    </div>
+  </div>
+</nav>
+    <div id="main"><section class="article">
+  <h2 class="title">Kraken P2P 镜像分发系统的生产实践</h2>
+  <p class="sub">2021-07-08</p>
+  <article class="content">
+    <p><strong>1. 基本介绍</strong></p>
+<p>Kraken (<a href="https://github.com/uber/kraken" target="_blank" rel="noopener">https://github.com/uber/kraken</a>) 是一个由P2P（peer-to-peer）驱动的专注于提升扩展性和可靠性的docker镜像仓库。它被设计用来在混合云环境中进行docker镜像管理、复制和分发。通过可插拔式的后端支持，可以方便和已有的镜像仓库（如Harbor）协作（甚至可替代Harbor的核心功能：支持镜像拉取也支持镜像下载，将在下文介绍），作为镜像分发层来运行。</p>
+<p>其可做到<strong>每天分发100w个镜像层，其中包含10w个超过1GB大小的块</strong>。峰值性能下，<strong>30s内可分发2w个100MB - 1G的镜像层</strong>。</p>
+<p><strong>2. 功能特点</strong></p>
+<ul>
+<li>高扩展性。Kraken镜像分开速度 &gt; 主机下载速度的50%。而且，集群规模和镜像大小对下载速度没有明显影响。<ul>
+<li>每个集群至少可支持15k台主机</li>
+<li>支持任意大镜像层。默认限制为20G，以获得最佳性能</li>
+</ul>
+</li>
+<li>高可用性。所有组件都不是单点部署</li>
+<li>安全性。支持TLS上传验证和数据完整性保护</li>
+<li>兼容多种后端存储。将数据放在可靠存储服务，如S3, GCS, ECR, HDFS等，同时接入其他存储非常容易</li>
+<li>可实现跨集群镜像同步复制</li>
+<li>依赖极少。依赖后端存储之外，只依赖DNS</li>
+</ul>
+<p><strong>3. 设计理念</strong></p>
+<p>Kraken的高级思想是让<strong>少量专用主机（调用镜像存储服务拉取镜像）将内容播种到运行在集群中每个主机上的Agent上（即一个deamonset服务）</strong></p>
+<p>一个中心组件，跟踪器（tracker，类似Zookeeper的组件），将协调网络中的所有参与者，形成一个伪随机规则图（各个Agent之前随机同步）</p>
+<p>这样的图连通度高，直径小。结果是，就算只有一个播种者，一秒内加入了成千上万的端点（peer），所有参与者理论上可以达到至少80%的最大上传/下载速度（当前实现下可达到60%），性能在镜像size变大和集群规模变大时不受影响</p>
+<p><strong>4. 架构说明</strong></p>
+<p><strong>4.1 核心流程图</strong></p>
+<p><img src="https://github.com/uber/kraken/raw/master/assets/architecture.svg" alt="img"></p>
+<ul>
+<li>Agent<ul>
+<li>部署在每台Node上</li>
+<li>实现docker镜像仓库接口（即可以接受docker pull请求）</li>
+<li>向tracker申明自己拥有的内容</li>
+<li>连接请求tracker后返回peer列表，用于下载内容</li>
+</ul>
+</li>
+<li>Origin<ul>
+<li>专用播种机</li>
+<li>将镜像层存储在可靠存储上 (e.g. S3, GCS, ECR)</li>
+<li>形成一个自修复散列环来分配负载</li>
+</ul>
+</li>
+<li>Tracker<ul>
+<li>记录哪些peer上有哪些内容 (包含下载中和下载完成的)</li>
+<li>提供拉取某些镜像层对应的peer列表</li>
+</ul>
+</li>
+<li>Proxy<ul>
+<li>实现docker镜像仓库接口（即可以接受docker push请求）</li>
+<li>上传镜像层到origin，进而到后端存储</li>
+<li>上传Tag到Build Index，进而到后端存储</li>
+</ul>
+</li>
+<li>Build-Index<ul>
+<li>将 tag 映射到 digest，如 v1.0.0 → sha256:6a8b53655bcda24a2a44131e249f70eec0251d2b8e6d75c901ebe7d3f34c641d (存储镜像层的后端存储只认识Digest)</li>
+<li>无一致性保证。镜像覆盖场景，如某个组件多次打镜像，一直用latest作为tag，因为ngnix缓存关系，Build-Index可能返回的不是最新的digest</li>
+<li>支持多集群间镜像复制</li>
+<li>将Tag存储在可靠存储上 (e.g. S3, GCS, ECR)</li>
+</ul>
+</li>
+</ul>
+<p><strong>4.2 镜像拉取流程图</strong></p>
+<p><img src="https://raw.githubusercontent.com/uber/kraken/master/assets/kraken_core.svg" alt="img"></p>
+<p><strong>4.3 镜像复制流程图</strong></p>
+<p><img src="https://raw.githubusercontent.com/uber/kraken/master/assets/kraken_build_index.svg" alt="img"></p>
+<p><strong>5. 基准测试</strong></p>
+<p>3GB 镜像 每个镜像有两个镜像层 2600个节点同时下载（要进行5200次下载） 节点下载限速300MB/s (使用 5个trackers实例和 5个origins实例):</p>
+<ul>
+<li>p50 = 10s</li>
+<li>p99 = 18s</li>
+<li>p99.9 = 22s</li>
+</ul>
+<p><strong>结论：2600个镜像层，在10s内下载完成，几乎所有的镜像层，在22s内全部下载完成</strong></p>
+<p><strong>6. 与其他项目对比</strong></p>
+<p><strong>6.1 Gragonfly from Alibaba</strong></p>
+<p>Dragonfly集群有一个或几个“超级节点”（类似Kraken中tracker的角色），它们协调集群中每4MB数据块的传输。</p>
+<p>虽然超级节点可能会做出最优选择，<strong>但整个集群的吞吐量由几个节点的性能决定</strong>，随着镜像层大小和集群规模的增长，镜像分发性能将线性降低</p>
+<p>Kraken的tracker只负责协调各个端点形成一个随机连接图，让数据传输的细节由各个端点自行决定，所以面对大镜像层分发有更好的扩展性。此外，Kraken支持HA并支持跨集群的镜像复制，对混合云环境而言非常重要</p>
+<p><strong>6.2</strong> <strong>BitTorrent</strong></p>
+<p>Kraken最初基于BitTorrent创建，最终因考虑与存储方案集成和方便做性能优化，实现了自己的P2P驱动</p>
+<p><strong>7. 使用限制</strong></p>
+<ul>
+<li>Kraken对单次docker pull的速度并没有提升，只有在镜像分发吞吐量成了你的瓶颈时才能实现威力。如果想加速docker pull，可以用<a href="https://github.com/uber/makisu" target="_blank" rel="noopener">Makisu</a>，实现在构建时镜像层更好的复用，或者调整镜像压缩比，因为拉取镜像时大部分时间都花在了解压缩上面</li>
+<li>Build-Index无一致性保证。镜像覆盖场景，如某个组件多次打镜像，一直用latest作为tag，因为ngnix缓存关系，Build-Index可能返回的不是最新的digest，作者正在优化这块的功能逻辑。当前可以通过减少缓存失效时间来部分解决</li>
+<li>理论上，Kraken可分发任意大小的镜像层，而性能几乎不受影响。不过当前强制执行20G的限制，不能支持超大镜像层的使用。如果你有超大镜像层的需求，建议可以先把他们分割成小于10GB的层</li>
+</ul>
+<p><strong>8. 与Harbor集成</strong></p>
+<p><strong>8.1 架构图</strong></p>
+<p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/kraken-harbor.jpg" alt="img">        </p>
+<p>好处：</p>
+<ul>
+<li>保留harbor这一层，有利于利用harbor的项目管理、镜像扫描等kraken不具备的能力，且如果kraken出现问题，也可切换到harbor正常拉取镜像</li>
+<li>结合harbor-registry的通知机制，可同时实现镜像预热+P2P镜像分发，极大加快发布的速度</li>
+</ul>
+<p><strong>8.2 镜像预热</strong></p>
+<p><strong>8.2.1 修改harbor-registry的配置文件，增加另一个通知项</strong></p>
+<pre><code>notifications:
+  endpoints:
+    - name: harbor
+      disabled: false
+      url: http://harbor-harbor-core/service/notifications
+      timeout: 3000ms
+      threshold: 5
+      backoff: 1s
+      ignoredmediatypes:
+        - application/vnd.docker.image.rootfs.diff.tar.gzip
+        - application/vnd.docker.image.rootfs.foreign.diff.tar.gzip
+        - application/vnd.oci.image.layer.v1.tar
+        - application/vnd.oci.image.layer.v1.tar+gzip
+        - application/vnd.oci.image.layer.v1.tar+zstd
+        - application/vnd.oci.image.layer.nondistributable.v1.tar
+        - application/vnd.oci.image.layer.nondistributable.v1.tar+gzip
+        - application/vnd.oci.image.layer.nondistributable.v1.tar+zstd
+        - application/octet-stream
+    - name: kraken
+      disabled: false
+      url: http://kraken-proxy.kraken.svc.cluster.local:10050/registry/notifications
+      timeout: 3000ms
+      threshold: 5
+      backoff: 1s</code></pre><p><strong>8.2.2 修改kraken-origin、kraken-buildindex的配置文件，将harbor配置为存储服务</strong></p>
+<pre><code>build_index:
+  replicas: 3
+  extraBackends: |-
+    - namespace: .*
+      backend:
+        registry_tag:
+          address: xxx
+          security:
+            basic:
+              username: admin
+              password: ***
+
+origin:
+  replicas: 3
+  extraBackends: |-
+    - namespace: .*
+      backend:
+        registry_blob:
+          address: xxx
+          security:
+            basic:
+              username: admin
+              password: ***</code></pre><p><strong>9. 核心配置 （代码块里均为默认配置）</strong></p>
+<p><strong>9.1 Peer之间上传下载带宽 （node节点之间）</strong></p>
+<pre><code>scheduler:
+  conn:
+    bandwidth:
+      enable: true
+      egress_bits_per_sec: 1677721600  # 200*8 Mbit
+      ingress_bits_per_sec: 2516582400 # 300*8 Mbit</code></pre><p><strong>9.2 后端服务上传下载带宽 （与nos交互）</strong></p>
+<pre><code>backends:
+ - namespace: .*
+   backend:
+     s3: &lt;omitted&gt;
+   bandwidth:
+     enabled: true
+     egress_bits_per_sec: 8589934592   # 8 Gbit
+     ingress_bits_per_sec: 85899345920 # 10*8 Gbit</code></pre><p><strong>9.3 磁盘缓存过期时间和缓存文件数量</strong></p>
+<pre><code>store:
+  cache_cleanup:
+    tti: 6h
+  download_cleanup:
+    tti: 6h</code></pre><p>origin 另外可限制缓存Blob数</p>
+<pre><code>store:
+  capacity: 1000000</code></pre><p><strong>9.4 内存缓存过期时间</strong></p>
+<p>agent / origin 配置</p>
+<pre><code>scheduler:
+   seeder_tti: 5m</code></pre><p><strong>9.5 origin / build-index 配置多后端</strong></p>
+<pre><code>backends:
+- namespace: library/.*
+   backend:
+     registry_blob:
+       address: index.docker.io
+       timeout: 60s
+       security:
+         basic:
+           username: &quot;&quot;
+           password: &quot;&quot;
+- namespace: test-domain/.*
+   backend:
+     http:
+       download_url: http://test-domain:9000/download?sha256=%s
+       download_backoff:
+         enabled: true
+- namespace: ecr-images/.*
+  backend:
+    registry_tag:
+      address: 123456789012.dkr.ecr.&lt;region&gt;.amazonaws.com
+      security:
+        credsStore: &#39;ecr-login&#39;
+- namespace: s3-images/.*
+  backend:
+    s3:
+      region: us-west-1
+      bucket: test-bucket
+      root_directory: /test-bucket/kraken/default/
+      name_path: sharded_docker_blob
+      username: kraken-user
+- namespace: minio-images/.*
+  backend:
+    s3:
+      region: us-east-1
+      bucket: self-hosted-bucket
+      root_directory: /kraken/default/
+      name_path: sharded_docker_blob
+      username: minio-user
+      endpoint: http://172.17.0.1:9000
+      disable_ssl: true
+      force_path_style: true
+  bandwidth:
+    enable: true
+- namespace: gcs-images/.*
+  backend:
+    gcs:
+      username: kraken-user
+      bucket: test-bucket
+      root_directory: /test-bucket/kraken/default/
+      name_path: sharded_docker_blob
+  bandwidth:
+    enable: true
+
+auth:
+ s3:
+   kraken-user:
+     s3:
+       aws: kraken-user
+       aws_access_key_id: &lt;keyid&gt;
+       aws_secret_access_key: &lt;key&gt;
+   minio-user:
+     s3:
+       aws: minio-user
+       aws_access_key_id: &lt;keyid&gt;
+       aws_secret_access_key: &lt;key&gt;
+ gcs:
+   kraken-user:
+     gcs:
+       access_blob: &lt;service_account_key&gt;</code></pre><p><strong>9.6 torrent并发下载数</strong></p>
+<pre><code> scheduler:
+    connstate:
+      max_open_conn: 10</code></pre><p><strong>10. 部署</strong></p>
+<p><strong>10.1 通过Helm</strong></p>
+<pre><code class="shell"># 添加 Helm repo
+helm repo add iamyeka https://iamyeka.github.io/helm-charts
+
+# 一键安装
+helm install kraken -n kraken --create-namespace iamyeka/kraken</code></pre>
+<p>内置了 Grafana dashboard大盘，可导入使用，路径：<a href="https://github.com/iamyeka/helm-charts/tree/main/charts/kraken/dashboard" target="_blank" rel="noopener">https://github.com/iamyeka/helm-charts/tree/main/charts/kraken/dashboard</a></p>
+<p>大盘的指标来源于二次开发添加的一些指标，具体修改见：<a href="https://github.com/iamyeka/kraken/tree/enhance-observability" target="_blank" rel="noopener">https://github.com/iamyeka/kraken/tree/enhance-observability</a></p>
+<p>生产实测，总体镜像平均拉取耗时下降 66.6%，最大拉取耗时下降 33.6%，加速效果较明显</p>
+
+  </article>
+  <footer class="f-cf">
+    
+      <a href="/2024/07/17/prometheus-cpu-fluctuation/" class="link f-fl">⟵Prometheus CPU利用率震荡问题分析</a>
+    
+    
+      <a href="/2020/11/18/golang-analyze/" class="link f-fr">golang协程对比java线程⟶</a>
+    
+  </footer>
+</section>
+
+
+    <link rel="stylesheet" href="https://unpkg.com/gitalk/dist/gitalk.css">
+<div id="gitalk-container"></div>
+<script src="https://unpkg.com/gitalk/dist/gitalk.min.js"></script>
+<script type="text/javascript">
+    var gitalk = new Gitalk({
+        clientID: '4e08eb89d32a7fa72ccd',
+        clientSecret: 'a3d809fa86c720cc9b944a53e689ad1e9779b162',
+        id: location.pathname,
+        repo: 'iamyeka.github.io',
+        owner: 'iamyeka',
+        admin: ['iamyeka']
+    })
+    gitalk.render('gitalk-container')
+</script>
+</div>
+    <footer id="footer" class="f-cf">
+</footer>
+</div>
+<a href="https://github.com/iamyeka" target="_blank" rel="noopener" class="github-corner" aria-label="View source on GitHub">
+    <svg width="80" height="80" viewBox="0 0 250 250"
+         style="fill:#151513; color:#fff; position: absolute; top: 0; border: 0; right: 0;" aria-hidden="true">
+        <path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"></path>
+        <path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2"
+              fill="currentColor" style="transform-origin: 130px 106px;" class="octo-arm"></path>
+        <path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z"
+              fill="currentColor" class="octo-body"></path>
+    </svg>
+</a>
+<style>.github-corner:hover .octo-arm {
+        animation: octocat-wave 560ms ease-in-out
+    }
+
+    @keyframes octocat-wave {
+        0%, 100% {
+            transform: rotate(0)
+        }
+        20%, 60% {
+            transform: rotate(-25deg)
+        }
+        40%, 80% {
+            transform: rotate(10deg)
+        }
+    }
+
+    @media (max-width: 500px) {
+        .github-corner:hover .octo-arm {
+            animation: none
+        }
+
+        .github-corner .octo-arm {
+            animation: octocat-wave 560ms ease-in-out
+        }
+    }</style>
+</body>
+</html>
