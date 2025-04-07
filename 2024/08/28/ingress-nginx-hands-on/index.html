@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  <title>云原生网关 —— Ingress-nginx | ryanwuer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="description" content="介绍 Ingress-nginx 在生产环境碰到的两则问题">
+<meta property="og:type" content="article">
+<meta property="og:title" content="云原生网关 —— Ingress-nginx">
+<meta property="og:url" content="http://yoursite.com/2024/08/28/ingress-nginx-hands-on/index.html">
+<meta property="og:site_name" content="ryanwuer">
+<meta property="og:description" content="介绍 Ingress-nginx 在生产环境碰到的两则问题">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/gallery/wufazhuce-1034.png">
+<meta property="article:published_time" content="2024-08-27T16:00:00.000Z">
+<meta property="article:modified_time" content="2025-04-07T02:39:04.590Z">
+<meta property="article:author" content="ryanwuer">
+<meta property="article:tag" content="云原生">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/gallery/wufazhuce-1034.png">
+  
+    <link rel="icon" href="https://blog-1302533045.cos.ap-nanjing.myqcloud.com/images/icon.001.png">
+  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlightjs-line-numbers.js@2.6.0/dist/highlightjs-line-numbers.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', (event) => {
+      document.querySelectorAll('pre code').forEach((block) => {
+        hljs.highlightBlock(block);``
+        hljs.lineNumbersBlock(block);
+      });
+    });
+  </script>
+  
+<link rel="stylesheet" href="/css/index.css">
+
+<meta name="generator" content="Hexo 4.2.1"></head>
+
+<body style="
+
+
+    background-color: #eff0f6
+
+        ">
+<div id="container">
+    <nav id="nav">
+  <header class="header">
+    <a href="/" class="title"></a>
+  </header>
+  <div class="ctnWrap">
+    <div class="icons">
+      
+        
+          
+            <a href="https://github.com/ryanwuer" target="_blank" class="nav-icn iconfont icon-github">·GitHub</a>
+          
+        
+      
+    </div>
+    <div class="menu">
+      
+        
+            <a href="/" class="nav-menu ">主页</a>
+          
+        
+            <a href="/archives" class="nav-menu ">归档</a>
+          
+        
+            <a href="/tag" class="nav-menu ">标签</a>
+          
+        
+            <a href="/about" class="nav-menu ">关于</a>
+          
+        
+      
+    </div>
+  </div>
+</nav>
+    <div id="main"><section class="article">
+  <h2 class="title">云原生网关 —— Ingress-nginx</h2>
+  <p class="sub">2024-08-28</p>
+  <article class="content">
+    <h1 id="问题一：Ingress-Nginx-TCP-代理-主动断开"><a href="#问题一：Ingress-Nginx-TCP-代理-主动断开" class="headerlink" title="问题一：Ingress-Nginx TCP 代理 主动断开"></a>问题一：Ingress-Nginx TCP 代理 主动断开</h1><h2 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h2><p>大数据方反馈通过TCP访问的服务，会出现偶发性的请求过程中TCP断连。这些后台服务部署在K8s中，通过ingress-nginx进行TCP代理暴露服务</p>
+<h2 id="排查过程"><a href="#排查过程" class="headerlink" title="排查过程"></a>排查过程</h2><h3 id="错误排查方向"><a href="#错误排查方向" class="headerlink" title="错误排查方向"></a>错误排查方向</h3><p>基础知识：一开始以为是http层的长连接在达到默认的1000次请求后nginx会主动断开方便负载，实际沟通之后确认数据库这种通过TCP协议传输的服务不存在这种http层的长连接机制<br>业务特点：执行SQL，可能发起长达数十分钟的请求</p>
+<h3 id="问题分析"><a href="#问题分析" class="headerlink" title="问题分析"></a>问题分析</h3><p>目前海外国际的K8s中的，nginx的worker数是4，worker的优雅关闭时间是240s<br><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/POPO-20250407-100624.png" alt="img"></p>
+<p>从日志里看确实有一直发生一些 nginx -s reload，可能导致tcp链接被断开<br><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/POPO-20250407-100636.png" alt="img"></p>
+<p>类似的websockets链接被断开的issue：<a href="https://github.com/kubernetes/ingress-nginx/issues/2461" target="_blank" rel="noopener">https://github.com/kubernetes/ingress-nginx/issues/2461</a></p>
+<h3 id="结论"><a href="#结论" class="headerlink" title="结论"></a>结论</h3><p>默认240s的优雅停机策略，但是Spark这边的一些服务请求可能会超过240s才能返回。可参考下面这篇文档的分析过程：</p>
+<h2 id="解决方案"><a href="#解决方案" class="headerlink" title="解决方案"></a>解决方案</h2><h3 id="方案1：调大worker的优雅关闭时间"><a href="#方案1：调大worker的优雅关闭时间" class="headerlink" title="方案1：调大worker的优雅关闭时间"></a>方案1：调大worker的优雅关闭时间</h3><p>优点：变更快捷，将超时时间设置的较大，能快速解决99%的问题<br>缺点：还是有可能（SQL执行超过优雅关闭的超时时间）出现断连的情况；内存可能上涨（出现比较多的待终止的worker）</p>
+<h3 id="方案2：隔离ingress-nginx，减少其他ingress变更造成的影响"><a href="#方案2：隔离ingress-nginx，减少其他ingress变更造成的影响" class="headerlink" title="方案2：隔离ingress-nginx，减少其他ingress变更造成的影响"></a>方案2：隔离ingress-nginx，减少其他ingress变更造成的影响</h3><p>优点：可避免其他ingress变更导致的reload，配合调大worker的优雅关闭时间，能更好的规避类似的问题<br>缺点：后端发布时，依然会出现reload，但这时依靠后端自行做优雅关闭，也可规避这种问题</p>
+<h3 id="方案3：引入其他-Ingress-实现"><a href="#方案3：引入其他-Ingress-实现" class="headerlink" title="方案3：引入其他 Ingress 实现"></a>方案3：引入其他 Ingress 实现</h3><blockquote>
+<p>Apache APISIX</p>
+</blockquote>
+<p><a href="https://apisix.apache.org/docs/ingress-controller/concepts/apisix_route/#tcp-route" target="_blank" rel="noopener">https://apisix.apache.org/docs/ingress-controller/concepts/apisix_route/#tcp-route</a><br>Apache APISIX 是一个动态、实时、高性能的 API 网关，提供了丰富的流量管理功能，如负载均衡、动态上游、灰度发布、服务熔断、身份验证等。以下是一些关于 Apache APISIX 的主要特点：<br>高性能：Apache APISIX 是基于 Nginx 和 OpenResty 的，因此它可以利用 Nginx 的高性能和 OpenResty 的灵活性。<br>动态配置和热加载：Apache APISIX 支持动态配置和热加载，这意味着你可以在不重启服务的情况下更新配置。<br>丰富的插件：Apache APISIX 提供了丰富的插件，包括身份验证、安全、流量控制、观察性等。<br>多语言支持：Apache APISIX 支持多种语言编写插件，包括 Lua、Java、Python 等。<br>服务网格：除了作为 API 网关使用，Apache APISIX 也可以作为服务网格的数据平面，提供微服务之间的流量管理。<br>社区和支持：Apache APISIX 是 Apache 基金会的顶级项目，有一个活跃的社区和商业支持。<br>官网博客对nginx和kong的局限性的描述，申明是解决了nginx无法热加载配置问题<br><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/POPO-20250407-100603.png" alt="img"></p>
+<blockquote>
+<p>Traefik</p>
+</blockquote>
+<p><a href="https://github.com/traefik/traefik" target="_blank" rel="noopener">https://github.com/traefik/traefik</a><br>Traefik 是一个现代的 HTTP 反向代理和负载均衡器，它可以自动发现和配置服务。以下是一些关于 Traefik 的主要特点：<br>动态配置：Traefik 可以自动发现和配置服务，这使得它非常适合用在微服务和容器化的环境中。<br>多协议支持：Traefik 支持多种协议，包括 HTTP、HTTPS、TCP、UDP。<br>易用性：Traefik 的配置比较简单，特别是对于简单的用例。它提供了一个 Web UI，可以方便地查看和管理服务。<br>Let’s Encrypt 集成：Traefik 集成了 Let’s Encrypt，可以自动为你的服务获取和更新 SSL 证书。<br>服务网格：除了作为反向代理和负载均衡器使用，Traefik 也可以作为服务网格的数据平面，提供微服务之间的流量管理。<br>社区和支持：Traefik 有一个活跃的社区和商业支持。<br>Github 上的 stars 数达到了 4.7w，自带 UI，有一些特色的新功能，是一个成熟完善的网关方案</p>
+<blockquote>
+<p>Envoy</p>
+</blockquote>
+<p>Envoy 是一个开源的边缘和服务代理，设计用于云原生应用。以下是一些关于 Envoy 的主要特点：</p>
+<ul>
+<li>高性能：Envoy 是用 C++ 编写的，因此它具有很高的性能。</li>
+<li>动态服务发现：Envoy 可以动态发现上游服务，这使得它非常适合用在微服务和容器化的环境中。</li>
+<li>多协议支持：Envoy 支持多种协议，包括 HTTP/1.1, HTTP/2, gRPC, TCP 等。</li>
+<li>详细的度量和日志：Envoy 提供了详细的度量和日志，可以帮助你理解和调试你的服务。</li>
+<li>先进的负载均衡：Envoy 提供了一些先进的负载均衡特性，如熔断、重试、超时、健康检查等。</li>
+<li>过滤器链：Envoy 的过滤器链允许你在请求和响应路径上插入自定义的过滤器，以实现复杂的行为。</li>
+<li>社区和支持：Envoy 由 Lyft 开发，现在是 CNCF 的项目，有一个活跃的社区和广泛的商业支持。</li>
+</ul>
+<p>比较各种以 Envoy 为核心的 ingress 实现</p>
+<ol>
+<li>Contour：由 VMware 维护，提供了一个简单的、直观的方式来管理 Envoy。Contour 提供了一些基本的流量管理功能，如路由、重试和超时，但不如 Istio 或 Ambassador 全面。Contour 的主要优点是它的简单性和易用性。</li>
+<li>Istio：是一个全功能的服务网格，提供了流量管理、安全、观察性等功能。Istio 使用 Envoy 作为数据平面，但它的配置比 Contour 更复杂。Istio 的主要优点是它的功能丰富和灵活性。</li>
+<li>Ambassador：是一个 API 网关，也可以作为 Kubernetes Ingress 控制器使用。Ambassador 提供了一些高级功能，如认证、速率限制和熔断。Ambassador 的主要优点是它的功能丰富和易用性。</li>
+<li>Gloo：由 Solo.io 开发，是一个功能丰富的 API 网关。Gloo 提供了一些高级功能，如函数级路由、请求转换和安全策略。Gloo 的主要优点是它的功能丰富和灵活性。</li>
+</ol>
+<p>附上各种ingress controller实现的对比：<br><a href="https://docs.google.com/spreadsheets/d/191WWNpjJ2za6-nbG4ZoUMXMpUK8KlCIosvQB0f-oq3k/edit?pli=1#gid=907731238" target="_blank" rel="noopener">https://docs.google.com/spreadsheets/d/191WWNpjJ2za6-nbG4ZoUMXMpUK8KlCIosvQB0f-oq3k/edit?pli=1#gid=907731238</a><br><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/POPO-20250407-100541.png" alt="img"></p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>如上主要的 3 种 ingress 实现均支持各种协议的代理（https、tcp、websocket 等），均支持路由（按 host、path 等）、负载均衡策略（Round robin、Sticky sessions等）等各种代理服务器的核心功能。理论上都可以满足大数据的使用场景，但从组件轻量性、简单易用性和内部相关使用经验考虑，决定采用 Contour + Envoy 作为最终的方案<br>Contour优势：</p>
+<ul>
+<li>目前是CNCF的孵化项目，其他上述ingress实现均未进入名单（Envoy是CNCF毕业的项目）<br><a href="https://landscape.cncf.io/?group=projects-and-products&amp;view-mode=grid&amp;project=incubating&amp;item=orchestration-management--service-proxy--contour" target="_blank" rel="noopener">https://landscape.cncf.io/?group=projects-and-products&amp;view-mode=grid&amp;project=incubating&amp;item=orchestration-management--service-proxy--contour</a></li>
+<li>全面支持 Ingress v2版本，Gateway API（<a href="https://gateway-api.sigs.k8s.io/），支持到最新正式的v1.0版本。后续可考虑将现有的" target="_blank" rel="noopener">https://gateway-api.sigs.k8s.io/），支持到最新正式的v1.0版本。后续可考虑将现有的</a> ingress 资源切换到 Gateway API，或者更高阶的网关能力，社区提供了详细的迁移文档</li>
+</ul>
+<p>内部使用经验：</p>
+<ul>
+<li>Serverless 的 Knative 里的网关用的是 Envoy</li>
+<li>阿里云的 ServiceMesh 用的是 Isito，网关也是 Envoy</li>
+</ul>
+<h1 id="问题二：Ingress-Nginx端口满导致502"><a href="#问题二：Ingress-Nginx端口满导致502" class="headerlink" title="问题二：Ingress-Nginx端口满导致502"></a>问题二：Ingress-Nginx端口满导致502</h1><h2 id="现象"><a href="#现象" class="headerlink" title="现象"></a>现象</h2><p>同步调用的Serverless集群，在客户端出现502报错</p>
+<h2 id="网络架构"><a href="#网络架构" class="headerlink" title="网络架构"></a>网络架构</h2><p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/POPO-20250407-102203.png" alt="img"></p>
+<p>要点：<br>Serverless网关使用的 Kourier 网关挂到了流量入口的Ingress-nginx后面，ingress-nginx 与 serverless 的网关是点对点访问，所有 serverless 的集群必须经过 envoy 转发。TCP 连接的 5 元组下，如果同步请求不及时返回，目标 IP 是唯一（所有Serverless服务Service的externalName均指定为了：kourier-internal.kourier-system.svc.cluster.local）的情况下，会占用越来越多的 nginx 源端口。<br>关键日志：<br><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/POPO-20250407-102527.png" alt="img"></p>
+<p>直接原因： 找一个出现报错的服务，查看它的Serverless扩缩容配置<br><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/POPO-20250407-102223.png" alt="img"><br>最大副本是 10，扩容指标阈值是 200，也就是只能支持 2000 的并发度，但出问题时有 QPS 达到了 4500+，服务无法承受这样的流量请求，只能由 Activator hold住请求，一直占用着 Nginx 的源端口</p>
+<h2 id="改进措施"><a href="#改进措施" class="headerlink" title="改进措施"></a>改进措施</h2><h3 id="方案1：新部署Envoy网关暴露服务出来，作为-serverless-的入口"><a href="#方案1：新部署Envoy网关暴露服务出来，作为-serverless-的入口" class="headerlink" title="方案1：新部署Envoy网关暴露服务出来，作为 serverless 的入口"></a>方案1：新部署Envoy网关暴露服务出来，作为 serverless 的入口</h3><p>好处：</p>
+<ul>
+<li>与 ingress-nginx 隔离，避免互相影响</li>
+<li>链路性能更好</li>
+</ul>
+<p>劣势：</p>
+<ul>
+<li>机器成本：准备独立机器部署Envoy</li>
+<li>域名切换 —— 可以把重要的集群做下切换，调整范围缩小</li>
+</ul>
+<h3 id="方案2：内部管理平台通过新的-Consul-Nginx-暴露服务"><a href="#方案2：内部管理平台通过新的-Consul-Nginx-暴露服务" class="headerlink" title="方案2：内部管理平台通过新的 Consul+Nginx 暴露服务"></a>方案2：内部管理平台通过新的 Consul+Nginx 暴露服务</h3><p>团队调整后，没人继续维护Ingress-nginx链路，建议通过其他方式暴露服务，比如注册Pod到 Consul，Nginx从Consul拉取IP，实现服务的自动发现，因是内部方案，不继续做详细介绍 </p>
+
+  </article>
+  <footer class="f-cf">
+    
+    
+      <a href="/2024/07/26/codemagic/" class="link f-fr">codemagic 调研⟶</a>
+    
+  </footer>
+</section>
+
+
+    <link rel="stylesheet" href="https://unpkg.com/gitalk/dist/gitalk.css">
+<div id="gitalk-container"></div>
+<script src="https://unpkg.com/gitalk/dist/gitalk.min.js"></script>
+<script type="text/javascript">
+    var gitalk = new Gitalk({
+        clientID: '4e08eb89d32a7fa72ccd',
+        clientSecret: 'a3d809fa86c720cc9b944a53e689ad1e9779b162',
+        id: location.pathname,
+        repo: 'ryanwuer.github.io',
+        owner: 'ryanwuer',
+        admin: ['ryanwuer']
+    })
+    gitalk.render('gitalk-container')
+</script>
+</div>
+    <footer id="footer" class="f-cf">
+</footer>
+</div>
+<a href="https://github.com/ryanwuer" target="_blank" rel="noopener" class="github-corner" aria-label="View source on GitHub">
+    <svg width="80" height="80" viewBox="0 0 250 250"
+         style="fill:#151513; color:#fff; position: absolute; top: 0; border: 0; right: 0;" aria-hidden="true">
+        <path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"></path>
+        <path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2"
+              fill="currentColor" style="transform-origin: 130px 106px;" class="octo-arm"></path>
+        <path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z"
+              fill="currentColor" class="octo-body"></path>
+    </svg>
+</a>
+<style>.github-corner:hover .octo-arm {
+        animation: octocat-wave 560ms ease-in-out
+    }
+
+    @keyframes octocat-wave {
+        0%, 100% {
+            transform: rotate(0)
+        }
+        20%, 60% {
+            transform: rotate(-25deg)
+        }
+        40%, 80% {
+            transform: rotate(10deg)
+        }
+    }
+
+    @media (max-width: 500px) {
+        .github-corner:hover .octo-arm {
+            animation: none
+        }
+
+        .github-corner .octo-arm {
+            animation: octocat-wave 560ms ease-in-out
+        }
+    }</style>
+</body>
+</html>
