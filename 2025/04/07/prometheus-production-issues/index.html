@@ -14,7 +14,7 @@
 <meta property="og:locale" content="en_US">
 <meta property="og:image" content="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/gallery/wufazhuce-1035.png">
 <meta property="article:published_time" content="2025-04-06T16:00:00.000Z">
-<meta property="article:modified_time" content="2025-04-08T07:26:32.092Z">
+<meta property="article:modified_time" content="2025-04-10T09:18:08.675Z">
 <meta property="article:author" content="ryanwuer">
 <meta property="article:tag" content="云原生">
 <meta name="twitter:card" content="summary">
@@ -95,7 +95,8 @@
 <ol>
 <li>配置 storage.tsdb.max-block-duration = 2d，锁定住最大的block时间范围</li>
 </ol>
-<p><strong>接下来排查为什么任务无法完结，CPU耗费在了哪里？</strong><br>查看CPU profile<br><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/POPO-20250407-150410.png" alt="img"><br>有一块 scrape.reload 的CPU占比较高，这块和服务发现有关系，查看代码得知，我们用的Prometheus版本，会每 5s 做一次targets列表的全量刷新（主要是排序，在Label较多时，非常消耗cpu），在target数量很多的情况，会消耗大量的cpu<br>社区对该参数做了可配置的修改：<a href="https://github.com/prometheus/prometheus/commit/41630b8e8835585098f345b0d9740d7107ffb6eb" target="_blank" rel="noopener">https://github.com/prometheus/prometheus/commit/41630b8e8835585098f345b0d9740d7107ffb6eb</a><br>在 v2.36.0 版本里发布上线。discovery-reload-interval flag修改为2m后，CPU使用大大降低，放开 max-block-duration 到 9d，Compaction的任务也能正常完成了</p>
+<p><strong>接下来排查为什么任务无法完结，CPU耗费在了哪里？</strong><br>通过pprof，看 Compact 协程的运行情况<br><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/POPO-20250410-171410.png" alt="img"><br>分析：运行了1s，但等待调度的时间达到了6s，抢不到CPU！接下来分析CPU被什么模块占用了</p>
+<p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/POPO-20250407-150410.png" alt="img"><br>有一块 scrape.reload 的CPU占比较高，这块和服务发现有关系，查看代码得知，我们用的Prometheus版本，会固定每 5s 做一次targets列表的刷新<br>社区对该参数做了可配置的修改：<a href="https://github.com/prometheus/prometheus/commit/41630b8e8835585098f345b0d9740d7107ffb6eb" target="_blank" rel="noopener">https://github.com/prometheus/prometheus/commit/41630b8e8835585098f345b0d9740d7107ffb6eb</a><br>在 v2.36.0 版本里发布上线。discovery-reload-interval flag修改为2m后，CPU使用大大降低，放开 max-block-duration 到 9d，Compaction的任务也能正常完成了</p>
 <p><strong>继续深究下，为什么reload target这么耗费cpu呢？</strong><br>target对象里会包含目标的一些元数据，包括namespace、labels、annotations等，这些会参与排序、唯一性判断等操作，很消耗cpu<br>看下我们下发的一个Pod：</p>
 <pre><code class="yaml">metadata:
   name: xxx
