@@ -14,7 +14,7 @@
 <meta property="og:locale" content="en_US">
 <meta property="og:image" content="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/gallery/wufazhuce-1035.png">
 <meta property="article:published_time" content="2025-04-06T16:00:00.000Z">
-<meta property="article:modified_time" content="2025-04-14T06:18:59.793Z">
+<meta property="article:modified_time" content="2025-04-14T06:30:55.696Z">
 <meta property="article:author" content="ryanwuer">
 <meta property="article:tag" content="云原生">
 <meta name="twitter:card" content="summary">
@@ -265,6 +265,14 @@ nginx.ingress.kubernetes.io/session-cookie-name: route</code></pre>
 <h1 id="问题四：CPU-利用率震荡问题分析"><a href="#问题四：CPU-利用率震荡问题分析" class="headerlink" title="问题四：CPU 利用率震荡问题分析"></a>问题四：CPU 利用率震荡问题分析</h1><p>涉及Rate计算逻辑、时间戳设置逻辑，参见文章：<a href="https://ryanwuer.github.io/2024/07/17/prometheus-cpu-fluctuation/" target="_blank" rel="noopener">https://ryanwuer.github.io/2024/07/17/prometheus-cpu-fluctuation/</a></p>
 <h1 id="问题五：查询慢"><a href="#问题五：查询慢" class="headerlink" title="问题五：查询慢"></a>问题五：查询慢</h1><p>老生常谈的高基数问题，基数可以理解为所有 Label 对可能的组合数，Prometheus的查询性能和数据的基数有关系，基数越高，写入和查询性能越差<br>我们用到的 CD组件：Argo-rollout（版本：v0.9.3）组件就存在这样的问题，通过指标裁剪，不再返回已经删除的argo-rollout的对应的指标</p>
 <p>关于 label 较为合理的基数，可参考 Grafana 的两篇文章：<br><a href="https://grafana.com/blog/2022/02/15/what-are-cardinality-spikes-and-why-do-they-matter/" target="_blank" rel="noopener">what-are-cardinality-spikes-and-why-do-they-matter</a><br><a href="https://grafana.com/docs/grafana/latest/observability/metrics/prometheus/high-cardinality-metrics/" target="_blank" rel="noopener">high-cardinality-metrics</a></p>
+<h1 id="问题六：指标拉取异常"><a href="#问题六：指标拉取异常" class="headerlink" title="问题六：指标拉取异常"></a>问题六：指标拉取异常</h1><p>界面报错：<br><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/image-20250303114430293.png" alt="img"></p>
+<p>分析：zone-kk、zone.kk 作为 label的键在K8s里是合法的，但是转化为指标时，会都变为zone_kk，导致出现label名不唯一的问题，如下：</p>
+<pre><code class="yaml">template:
+  metadata:
+    labels:
+      zone-kk: &quot;b&quot;
+      zone.kk: &quot;b&quot;</code></pre>
+<p>如果某个Target Pod出现了上述问题，Prometheus会直接丢弃该指标，导致数据不完整</p>
 
   </article>
   <footer class="f-cf">
