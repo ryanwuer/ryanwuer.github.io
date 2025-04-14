@@ -14,7 +14,7 @@
 <meta property="og:locale" content="en_US">
 <meta property="og:image" content="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/gallery/wufazhuce-1035.png">
 <meta property="article:published_time" content="2025-04-06T16:00:00.000Z">
-<meta property="article:modified_time" content="2025-04-10T09:18:08.675Z">
+<meta property="article:modified_time" content="2025-04-14T06:17:18.284Z">
 <meta property="article:author" content="ryanwuer">
 <meta property="article:tag" content="云原生">
 <meta name="twitter:card" content="summary">
@@ -241,6 +241,18 @@
 <pre><code class="yaml">metric_relabel_configs:
 - regex: prometheus_replica
   action: labeldrop</code></pre>
+<p>注意，该种方式可能出现如下日志报错：</p>
+<pre><code class="textmate">Error on ingesting out-of-order samples </code></pre>
+<p>可以应用会话保持策略，如通过ingress-nginx暴露服务，可在Ingress里添加如下注解：</p>
+<pre><code class="textmate">nginx.ingress.kubernetes.io/affinity: cookie
+nginx.ingress.kubernetes.io/session-cookie-expires: &quot;172800&quot;
+nginx.ingress.kubernetes.io/session-cookie-max-age: &quot;172800&quot;
+nginx.ingress.kubernetes.io/session-cookie-name: route</code></pre>
+<p>但上述策略，依赖于Cookie，适用于浏览器环境，不适用于Prometheus的联邦拉取。但实际观察来看，上述报错不会影响数据的准确性，Prometheus会自动丢弃掉这些数据</p>
+<h2 id="方式3"><a href="#方式3" class="headerlink" title="方式3:"></a>方式3:</h2><ol>
+<li>配置拉取两个副本的Prometheus的数据（注意服务暴露方式，Statefulset 部署模式下，基于Headless的Service）</li>
+<li>查询侧去重，应用 <code>max_over_time</code>、<code>sum without（replica）</code> 等</li>
+</ol>
 <h1 id="问题三：Prometheus-Pod-反复重新调度，Pod一直处于销毁和重建中"><a href="#问题三：Prometheus-Pod-反复重新调度，Pod一直处于销毁和重建中" class="headerlink" title="问题三：Prometheus Pod 反复重新调度，Pod一直处于销毁和重建中"></a>问题三：Prometheus Pod 反复重新调度，Pod一直处于销毁和重建中</h1><p>我们通过 Prometheus-operator 交付 Prometheus Stack，operator会读取所有的PrometheusRule，并合并写到configmap中，并挂载给对应的 Prometheus Pod</p>
 <pre><code class="yaml">- configMap:
   defaultMode: 420
