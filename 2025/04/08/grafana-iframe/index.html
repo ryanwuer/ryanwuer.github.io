@@ -12,13 +12,13 @@
 <meta property="og:site_name" content="ryanwuer">
 <meta property="og:description" content="介绍如何做源码修改，使得 Grafana 基于 Iframe 更好地嵌入到其他平台">
 <meta property="og:locale" content="en_US">
-<meta property="og:image" content="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/gallery/wufazhuce-1037.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/gallery/wufazhuce-1037.png">
 <meta property="article:published_time" content="2025-04-07T16:00:00.000Z">
-<meta property="article:modified_time" content="2025-04-08T08:53:14.266Z">
+<meta property="article:modified_time" content="2025-12-09T12:20:20.383Z">
 <meta property="article:author" content="ryanwuer">
 <meta property="article:tag" content="云原生">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:image" content="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/gallery/wufazhuce-1037.png">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/gallery/wufazhuce-1037.png">
   
     <link rel="icon" href="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/icon.001.png">
   
@@ -83,25 +83,25 @@
   <p class="sub">2025-04-08</p>
   <article class="content">
     <h1 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h1><p>版本：v8.4.7<br>Grafana 提供了 <strong>kiosk</strong> 模式，可以将 dashboard 更好的展示在大屏幕上，下面是一篇介绍：<br><a href="https://grafana.com/blog/2019/05/02/grafana-tutorial-how-to-create-kiosks-to-display-dashboards-on-a-tv/" target="_blank" rel="noopener">https://grafana.com/blog/2019/05/02/grafana-tutorial-how-to-create-kiosks-to-display-dashboards-on-a-tv/</a></p>
-<h1 id="kiosk-的默认3种模式"><a href="#kiosk-的默认3种模式" class="headerlink" title="kiosk 的默认3种模式"></a>kiosk 的默认3种模式</h1><h2 id="kiosk-tv"><a href="#kiosk-tv" class="headerlink" title="kiosk=tv"></a>kiosk=tv</h2><p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/POPO-20250408-163209.png" alt="img"></p>
+<h1 id="kiosk-的默认3种模式"><a href="#kiosk-的默认3种模式" class="headerlink" title="kiosk 的默认3种模式"></a>kiosk 的默认3种模式</h1><h2 id="kiosk-tv"><a href="#kiosk-tv" class="headerlink" title="kiosk=tv"></a>kiosk=tv</h2><p><img src="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/images/POPO-20250408-163209.png" alt="img"></p>
 <p>特点：</p>
 <ol>
 <li>保留左上方菜单栏，点击可会弹出dashboard选择的浮窗</li>
 <li>保留右上方的时间范围、刷新、kiosk切换等功能</li>
 </ol>
-<h2 id="kiosk-full"><a href="#kiosk-full" class="headerlink" title="kiosk=full"></a>kiosk=full</h2><p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/POPO-20250408-163215.png" alt="img"></p>
+<h2 id="kiosk-full"><a href="#kiosk-full" class="headerlink" title="kiosk=full"></a>kiosk=full</h2><p><img src="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/images/POPO-20250408-163215.png" alt="img"></p>
 <p>特点：</p>
 <ol>
 <li>保留左上方菜单栏，点击可会弹出dashboard选择的浮窗</li>
 <li>保留右上方的时间范围、刷新、kiosk切换等功能</li>
 <li>保留新建 Panel、保存面板和设置按钮</li>
 </ol>
-<h2 id="kiosk-值为空"><a href="#kiosk-值为空" class="headerlink" title="kiosk= (值为空)"></a>kiosk= (值为空)</h2><p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/POPO-20250408-163218.png" alt="img"></p>
+<h2 id="kiosk-值为空"><a href="#kiosk-值为空" class="headerlink" title="kiosk= (值为空)"></a>kiosk= (值为空)</h2><p><img src="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/images/POPO-20250408-163218.png" alt="img"></p>
 <p>特点：</p>
 <ol>
 <li>仅展示 Panel</li>
 </ol>
-<h1 id="改进"><a href="#改进" class="headerlink" title="改进"></a>改进</h1><h2 id="kiosk-iframe（新增选项）"><a href="#kiosk-iframe（新增选项）" class="headerlink" title="kiosk=iframe（新增选项）"></a>kiosk=iframe（新增选项）</h2><p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/POPO-20250408-161320.png" alt="img"></p>
+<h1 id="改进"><a href="#改进" class="headerlink" title="改进"></a>改进</h1><h2 id="kiosk-iframe（新增选项）"><a href="#kiosk-iframe（新增选项）" class="headerlink" title="kiosk=iframe（新增选项）"></a>kiosk=iframe（新增选项）</h2><p><img src="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/images/POPO-20250408-161320.png" alt="img"></p>
 <h2 id="改进-1"><a href="#改进-1" class="headerlink" title="改进"></a>改进</h2><ul>
 <li>去掉左上方的菜单栏，防止用户在平台内点击跳到其他页面</li>
 <li>去掉Esc键的功能，防止按Esc键跳出kiosk模式</li>

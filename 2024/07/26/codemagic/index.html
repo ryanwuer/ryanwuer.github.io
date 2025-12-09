@@ -12,13 +12,13 @@
 <meta property="og:site_name" content="ryanwuer">
 <meta property="og:description" content="介绍一款 CI&#x2F;CD工具：Codemagic">
 <meta property="og:locale" content="en_US">
-<meta property="og:image" content="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/gallery/wufazhuce-1032.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/gallery/wufazhuce-1032.png">
 <meta property="article:published_time" content="2024-07-25T16:00:00.000Z">
-<meta property="article:modified_time" content="2025-03-23T11:18:24.698Z">
+<meta property="article:modified_time" content="2025-12-09T12:20:20.373Z">
 <meta property="article:author" content="ryanwuer">
 <meta property="article:tag" content="CI&#x2F;CD">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:image" content="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/gallery/wufazhuce-1032.png">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/gallery/wufazhuce-1032.png">
   
     <link rel="icon" href="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/icon.001.png">
   
@@ -93,8 +93,8 @@
 </ul>
 <h1 id="2-平台体验"><a href="#2-平台体验" class="headerlink" title="2. 平台体验"></a>2. 平台体验</h1><h2 id="2-1-Get-started"><a href="#2-1-Get-started" class="headerlink" title="2.1 Get started"></a>2.1 Get started</h2><p>   <a href="https://codemagic.io/getting-started" target="_blank" rel="noopener">https://codemagic.io/getting-started</a><br>   以 android-native 体验为例：<br>   <a href="https://docs.codemagic.io/yaml-quick-start/building-a-native-android-app/" target="_blank" rel="noopener">https://docs.codemagic.io/yaml-quick-start/building-a-native-android-app/</a></p>
 <h3 id="2-1-1-Clone-样例-Andriod-Native-仓库"><a href="#2-1-1-Clone-样例-Andriod-Native-仓库" class="headerlink" title="2.1.1 Clone 样例 Andriod Native 仓库"></a>2.1.1 Clone 样例 Andriod Native 仓库</h3><p>   <a href="https://github.com/codemagic-ci-cd/codemagic-sample-projects/tree/main/android/android-native-quick-start" target="_blank" rel="noopener">https://github.com/codemagic-ci-cd/codemagic-sample-projects/tree/main/android/android-native-quick-start</a><br>   clone 到自己的 Github 下</p>
-<h3 id="2-1-2-选择源码仓库"><a href="#2-1-2-选择源码仓库" class="headerlink" title="2.1.2 选择源码仓库"></a>2.1.2 选择源码仓库</h3><p>通过 OAuth2，授权 codemagic 获取 Git服务商权限（Gitlab、Gitlab 等），并选择对应仓库 andriod-native<br><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/codemagic-oauth2.png" alt="codemagic"></p>
-<h3 id="2-1-3-应用创建"><a href="#2-1-3-应用创建" class="headerlink" title="2.1.3 应用创建"></a>2.1.3 应用创建</h3><p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/codemagic-create-app.png" alt="codemagic"></p>
+<h3 id="2-1-2-选择源码仓库"><a href="#2-1-2-选择源码仓库" class="headerlink" title="2.1.2 选择源码仓库"></a>2.1.2 选择源码仓库</h3><p>通过 OAuth2，授权 codemagic 获取 Git服务商权限（Gitlab、Gitlab 等），并选择对应仓库 andriod-native<br><img src="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/images/codemagic-oauth2.png" alt="codemagic"></p>
+<h3 id="2-1-3-应用创建"><a href="#2-1-3-应用创建" class="headerlink" title="2.1.3 应用创建"></a>2.1.3 应用创建</h3><p><img src="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/images/codemagic-create-app.png" alt="codemagic"></p>
 <p>红框里报一个 <strong>GCLOUD_SERVICE_ACCOUNT_CREDENTIALS</strong> 变量缺失，它的作用是授权 codemagic 发布应用到 Google play，在下面会做配置的说明</p>
 <h3 id="2-1-4-签名"><a href="#2-1-4-签名" class="headerlink" title="2.1.4 签名"></a>2.1.4 签名</h3><p>所有应用程序在向公众提供之前都必须进行数字签名，以确认其作者并保证代码自签名以来没有被更改或损坏。</p>
 <ul>
@@ -113,7 +113,7 @@
 </ul>
 <h3 id="2-1-5-生成-Google-play-调用密钥"><a href="#2-1-5-生成-Google-play-调用密钥" class="headerlink" title="2.1.5  生成 Google play 调用密钥"></a>2.1.5  生成 Google play 调用密钥</h3><p><a href="https://play.google.com/console/signup" target="_blank" rel="noopener">https://play.google.com/console/signup</a><br>$25 注册费<br>目标：创建 ServiceAccount，获得 API 调用权限<br>具体可参考指引：<a href="https://docs.codemagic.io/yaml-publishing/google-play/" target="_blank" rel="noopener">https://docs.codemagic.io/yaml-publishing/google-play/</a></p>
 <h3 id="注意事项"><a href="#注意事项" class="headerlink" title="注意事项"></a>注意事项</h3><p>需要在 codemagic 绑定信用卡，才可以创建 Team，才能上传 KeyStore<br>注册 Google Play，有注册费 $25</p>
-<h1 id="3-计费方式"><a href="#3-计费方式" class="headerlink" title="3. 计费方式"></a>3. 计费方式</h1><h2 id="3-1-团队"><a href="#3-1-团队" class="headerlink" title="3.1 团队"></a>3.1 团队</h2><p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/codemagic-price.png" alt="codemagic"></p>
+<h1 id="3-计费方式"><a href="#3-计费方式" class="headerlink" title="3. 计费方式"></a>3. 计费方式</h1><h2 id="3-1-团队"><a href="#3-1-团队" class="headerlink" title="3.1 团队"></a>3.1 团队</h2><p><img src="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/images/codemagic-price.png" alt="codemagic"></p>
 <h2 id="3-2-企业"><a href="#3-2-企业" class="headerlink" title="3.2 企业"></a>3.2 企业</h2><p>$12,000 / year<br>特点：</p>
 <ul>
 <li>优先支持</li>

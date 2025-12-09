@@ -12,13 +12,13 @@
 <meta property="og:site_name" content="ryanwuer">
 <meta property="og:description" content="分析 Rate 函数计算逻辑，解释单核 Idle Rate &gt; 1 的背后原因">
 <meta property="og:locale" content="en_US">
-<meta property="og:image" content="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/gallery/wufazhuce-1030.png">
+<meta property="og:image" content="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/gallery/wufazhuce-1030.png">
 <meta property="article:published_time" content="2024-07-16T16:00:00.000Z">
-<meta property="article:modified_time" content="2025-03-11T13:44:50.048Z">
+<meta property="article:modified_time" content="2025-12-09T12:20:20.338Z">
 <meta property="article:author" content="ryanwuer">
 <meta property="article:tag" content="prometheus">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:image" content="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/gallery/wufazhuce-1030.png">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/gallery/wufazhuce-1030.png">
   
     <link rel="icon" href="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/icon.001.png">
   
@@ -83,7 +83,7 @@
   <p class="sub">2024-07-17</p>
   <article class="content">
     <h1 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h1><p>通过grafana发现，K8S集群节点利用率存在突刺的情况，具体如下图所示：</p>
-<p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/resource-fluctuation.png" alt="资源突刺"></p>
+<p><img src="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/images/resource-fluctuation.png" alt="资源突刺"></p>
 <p>现象：</p>
 <ul>
 <li>波动很大，有突然下落到很低利用率的情况</li>
@@ -91,7 +91,7 @@
 <h2 id="监控数据"><a href="#监控数据" class="headerlink" title="监控数据"></a>监控数据</h2><h3 id="表达式说明"><a href="#表达式说明" class="headerlink" title="表达式说明"></a>表达式说明</h3><blockquote>
 <p>CPU 利用率 看板计算表达式</p>
 </blockquote>
-<p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/node-panel-expression.png" alt="节点利用率看板表达式"></p>
+<p><img src="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/images/node-panel-expression.png" alt="节点利用率看板表达式"></p>
 <p>含义：<strong>查出每个节点上的单核平均利用率，做平均得到整个K8s集群的单核平均使用率</strong></p>
 <blockquote>
 <p> instance:node_cpu_utilisation:rate1m</p>
@@ -135,7 +135,7 @@
 <pre><code>1 - avg without (cpu, mode) (
   rate(node_cpu_seconds_total{job=&quot;node-exporter&quot;, mode=&quot;idle&quot;}[1m])
 )</code></pre><h3 id="Rate、IRate、Increase"><a href="#Rate、IRate、Increase" class="headerlink" title="Rate、IRate、Increase"></a>Rate、IRate、Increase</h3><p>如下图：假设现在是9点30分，我们每隔 5s 采样一次，在 09:30:23 查询最近 20s 的 rate 和 irate 值，也就是 [3s, 23s] 的区间内增长了多少？这里的问题在于查询区间的时间与采样时间不重合</p>
-<p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/rate-calculate.png" alt="rate如何计算"></p>
+<p><img src="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/images/rate-calculate.png" alt="rate如何计算"></p>
 <p><strong>Rate</strong></p>
 <p>取 20s 内最近和最远的两个采样点： {5s: 10} 、{20s: 30}，并计算它们的区间为 20 - 5 = 15s，期间请求量增长了 30 - 10 = 20 次。因此 rate(xxx[20s]) = 20 / 15 = 1.3333333</p>
 <p>问题：Promtheus 如何解决exporter重启导致Counter值被重置？（counter下降，就认为是一种重置）</p>
@@ -163,11 +163,11 @@ resultValue := lastValue - samples.Points[0].V + counterCorrection</code></pre>
 <p>Increase =  rate  <em>* 20 =</em> 20 / 15 * 20 =  26.67</p>
 <p>这也解释了为什么int类型的Counter值，通过increase计算出来的值不是int</p>
 <h3 id="数据分析"><a href="#数据分析" class="headerlink" title="数据分析"></a>数据分析</h3><p>查看 <code>instance:node_cpu_utilisation:rate1m</code>，也就是 <code>1 - avg without (cpu, mode) (rate(node_cpu_seconds_total{job=&quot;node-exporter&quot;, mode=&quot;idle&quot;}[1m]))</code></p>
-<p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/node-rate-negative.png" alt="node利用率-负数"></p>
+<p><img src="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/images/node-rate-negative.png" alt="node利用率-负数"></p>
 <p>出现某些节点的值是<font color='red'>负数</font>的情况，且达到很大的值：0.5，会间歇性发生</p>
 <p>可想而知，在这些节点的利用率有负数情况出现时，在计算平均节点单核利用率时，将大幅度拉低整体的值，导致出现断崖式下滑的情况</p>
 <p>单独看某个节点 idle cpu 的rate 1m的值，有某些核心的值 &gt; 1的情况</p>
-<p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/idle-cpu-rate-over-one.png" alt="某些核心idle大于1"></p>
+<p><img src="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/images/idle-cpu-rate-over-one.png" alt="某些核心idle大于1"></p>
 <p><strong>为什么 rate  idle 会大于1 ？</strong></p>
 <p><strong>猜想</strong></p>
 <p>问题要么出在Node-exporter，要么出在Prometheus</p>
@@ -210,10 +210,10 @@ Gap: 29.80000000447035
 <ul>
 <li>可能和负载压力有关系。Prometheus cpu使用达到 <strong>15.5核心</strong>，出现 <strong>23.4%</strong>的被限流的情况（30,000+的协程处理各项任务（指标拉取、聚合rule计算、告警规则计算、服务发现、配置热加载等等）</li>
 </ul>
-<p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/prometheus-throttle.png" alt="prometheus-throttle"></p>
+<p><img src="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/images/prometheus-throttle.png" alt="prometheus-throttle"></p>
 <p><strong>观测：</strong></p>
 <p>基于上述的 rate 计算逻辑，我们先取出 Prometheus 原始采集的样本数据，选择某个idle rate &gt; 1的时间点，找最近1分钟的采样点，一共有2个（30s的采集周期，符合预期）：</p>
-<p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/image-20240425120354924.png" alt="image-20240425120354924"></p>
+<p><img src="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/images/image-20240425120354924.png" alt="image-20240425120354924"></p>
 <ol>
 <li>采样1: 88647709.3 @1713341448.972</li>
 <li>采样2: 88647751.24 @1713341479.372</li>
@@ -223,7 +223,7 @@ Gap: 29.80000000447035
 <p>rate =  41.94 /  30.4000001 = 1.37960526 &gt; 1   </p>
 <p>与Prometheus 界面上通过Rate函数计算出的一致，验证了Rate计算的逻辑</p>
 <p>取其他时刻点，发现时间戳的值普遍 &gt; 30s，有的达到31s、32s，明明配置了30s的采集间隔，为什么会有这种差异？</p>
-<h4 id="为什么时间戳差值-gt-30s？"><a href="#为什么时间戳差值-gt-30s？" class="headerlink" title="为什么时间戳差值 &gt; 30s？"></a>为什么时间戳差值 &gt; 30s？</h4><p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/node-exporter-honor-timestamp.png" alt="node-exporter-尊重时间戳"></p>
+<h4 id="为什么时间戳差值-gt-30s？"><a href="#为什么时间戳差值-gt-30s？" class="headerlink" title="为什么时间戳差值 &gt; 30s？"></a>为什么时间戳差值 &gt; 30s？</h4><p><img src="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/images/node-exporter-honor-timestamp.png" alt="node-exporter-尊重时间戳"></p>
 <p>Node-exporter 采集任务配置了 <strong>尊重指标来源设置的时间戳</strong>（Prometheus 默认采用此配置），但从指标接口拉取的指标里不包含时间戳，所以最终会使用Prometheus自身的时间戳，作为指标最终的时间戳</p>
 <p>包含时间戳的指标返回格式样例：</p>
 <pre><code class="yaml">container_health_check_duration_millisecond{container_name=&quot;prometheus-node-exporter&quot;,namespace=&quot;monitoring&quot;,pod_name=&quot;kube-prometheus-prometheus-node-exporter-znxsv&quot;} 2.3509091e+07 1713756155090 </code></pre>
@@ -237,7 +237,7 @@ Gap: 29.80000000447035
 ch &lt;- prometheus.NewMetricWithTimestamp(time.Now(), metric)</code></pre>
 <p><strong>Prometheus指标时间戳设置流程</strong></p>
 <p>Target：指一个拉取指标的目标地址，如 <a href="http://1.2.3.4:8080/metrics" target="_blank" rel="noopener">http://1.2.3.4:8080/metrics</a></p>
-<p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/prom-set-timestamp.png" alt="Prometheus设置时间戳"></p>
+<p><img src="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/images/prom-set-timestamp.png" alt="Prometheus设置时间戳"></p>
 <p>分析：</p>
 <p>Prometheus每个副本启动了30,000+的协程处理各项任务（指标拉取、聚合rule计算、告警规则计算、服务发现、配置热加载等等）协程间的切换频繁，会导致：</p>
 <ul>
@@ -245,15 +245,15 @@ ch &lt;- prometheus.NewMetricWithTimestamp(time.Now(), metric)</code></pre>
 <li>定时任务触发后，在Http请求发出前，可能因<strong>协程切换，导致请求未得到有效处理，即实际等待了一段时间，才发出请求</strong>。因 <strong>协程间的切换的不确定性</strong>，有可能前一次拉取没有上面这种情况，但第二次拉取出现了，最终会导致两次Count的值的差值偏大，超过了两次拉取的时间差值，就会导致最终相除 &gt; 1</li>
 </ul>
 <p>示意图如下，在10:31:00，计算rate 1m的值，区间内有两个点：</p>
-<p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/difference-between-2-goroutine.png" alt="两次拉取协程切换导致的差异"></p>
+<p><img src="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/images/difference-between-2-goroutine.png" alt="两次拉取协程切换导致的差异"></p>
 <p><strong>验证负载压力的影响：</strong></p>
 <p>在测试环境的 Prometheus中（负载压力很低），配置静态拉取，选一台节点作为目标</p>
 <p>果然，差异出现了。测试环境的Rate计算始终不会超过1</p>
-<p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/test-prom-rate.png" alt="测试环境rate值"></p>
+<p><img src="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/images/test-prom-rate.png" alt="测试环境rate值"></p>
 <p>可以实锤和 Prometheus 的负载压力有关</p>
 <h1 id="改进措施"><a href="#改进措施" class="headerlink" title="改进措施"></a>改进措施</h1><h2 id="措施1：去掉-CPU-limit"><a href="#措施1：去掉-CPU-limit" class="headerlink" title="措施1：去掉 CPU limit"></a>措施1：去掉 CPU limit</h2><p>作用：解决Prometheus限流问题 —— 去掉 CPU limit</p>
 <p>效果：最近一天的单核心平均CPU利用率</p>
-<p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/image-20240425135651030.png" alt="image-20240425135651030"></p>
+<p><img src="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/images/image-20240425135651030.png" alt="image-20240425135651030"></p>
 <p>总结：</p>
 <ol>
 <li>一下子下落很多的情况基本消失了</li>
@@ -275,13 +275,13 @@ ch &lt;- prometheus.NewMetricWithTimestamp(time.Now(), metric)</code></pre>
 </ol>
 <p><strong>另一处社区实践：</strong></p>
 <p><a href="https://monitoring.mixins.dev/node-exporter/" target="_blank" rel="noopener">https://monitoring.mixins.dev/node-exporter/</a></p>
-<p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/monitoring-mixins-node-rate.png" alt="monitoring-mixins-node利用率"></p>
+<p><img src="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/images/monitoring-mixins-node-rate.png" alt="monitoring-mixins-node利用率"></p>
 <p>和 prometheus-community 社区的实践一致</p>
 <p>我们当前使用的Rate时间区间是1m，和拉取间隔30s是不匹配的。建议 Rate的区间至少设置为拉取间隔的4倍，在如下文章里有提到：</p>
 <p><a href="https://yasongxu.gitbook.io/container-monitor/yi-.-kai-yuan-fang-an/di-2-zhang-prometheus/prometheus-use#rate-de-ji-suan-luo-ji" target="_blank" rel="noopener">https://yasongxu.gitbook.io/container-monitor/yi-.-kai-yuan-fang-an/di-2-zhang-prometheus/prometheus-use#rate-de-ji-suan-luo-ji</a></p>
 <p>“建议将rate计算的范围向量的时间至少设为抓取间隔的四倍。这将确保即使抓取速度缓慢，且发生了一次抓取故障，您也始终可以使用两个样本。此类问题在实践中经常出现，因此保持这种弹性非常重要。例如，对于1分钟的抓取间隔，您可以使用4分钟的rate 计算，但是通常将其四舍五入为5分钟。”</p>
 <p>将rate的时间区间调整为<strong>5m</strong>，再次查询。节点cpu利用率出现负数的情况大大减少，值也很小，几乎消失了</p>
-<p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/rate5m.png" alt="rate5m"></p>
+<p><img src="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/images/rate5m.png" alt="rate5m"></p>
 <p>总结：</p>
 <ul>
 <li><p>当把rate区间从1m调整为5m，虽无法彻底规避协程切换带来的影响 —— 相邻拉取任务 指标值的差异不对应时间戳的差异，但在更长时间范围内进行统计，这种差异可以缩小，尤其在计算比例时。</p>
@@ -289,7 +289,7 @@ ch &lt;- prometheus.NewMetricWithTimestamp(time.Now(), metric)</code></pre>
 <p>覆盖的采集点从 2个 -&gt; 10个，有的相邻采样点的差异趋于一致，会使得整体差异变小</p>
 </li>
 <li><p>另外，rate 5m也可以使得整体利用率曲线更加平稳，不会出现短时间内一直来回波动的情况</p>
-<p><img src="https://iamyeka.oss-cn-hangzhou.aliyuncs.com/blog/images/image-20240425150139036.png" alt="image-20240425150139036"></p>
+<p><img src="https://raw.githubusercontent.com/ryanwuer/blog-assets/main/images/image-20240425150139036.png" alt="image-20240425150139036"></p>
 </li>
 </ul>
 <h1 id="文档参考"><a href="#文档参考" class="headerlink" title="文档参考"></a>文档参考</h1><ul>
